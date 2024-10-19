@@ -1,10 +1,13 @@
 FROM python:3.9
 
-# 將專案複製到容器中
+# 安装FFmpeg
+RUN apt-get update && apt-get install -y ffmpeg
+
+# 将专案复制到容器中
 COPY . /app
 WORKDIR /app
 
-# 安裝必要的套件
+# 安装必要的套件
 RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install -r requirements.txt
