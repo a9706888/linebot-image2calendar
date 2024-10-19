@@ -5,4 +5,8 @@ google.generativeai
 grpcio
 pillow
 requests
-git+https://github.com/ozgur/python-firebase
+python-firebase==1.2
+SpeechRecognition
+googletrans==3.1.0a0
+pydub
+python-dotenv
