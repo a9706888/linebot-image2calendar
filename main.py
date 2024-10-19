@@ -2,6 +2,10 @@ import json
 import logging
 import os
 import sys
+from linebot.v3.webhooks import AudioMessageContent
+import speech_recognition as sr
+from googletrans import Translator
+import tempfile
 
 if os.getenv("API_ENV") != "production":
     from dotenv import load_dotenv
@@ -20,10 +24,13 @@ from linebot.v3.messaging import (
     MessagingApiBlob,
 )
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent, AudioMessageContent
 
 import uvicorn
 from fastapi.responses import RedirectResponse
+import speech_recognition as sr
+from googletrans import Translator
+import tempfile
 
 logging.basicConfig(level=os.getenv("LOG", "WARNING"))
 logger = logging.getLogger(__file__)
@@ -175,6 +182,53 @@ def handle_github_message(event):
             )
         )
     return "OK"
+
+
+@handler.add(MessageEvent, message=AudioMessageContent)
+def handle_audio_message(event):
+    audio_content = b""
+    with ApiClient(configuration) as api_client:
+        line_bot_blob_api = MessagingApiBlob(api_client)
+        audio_content = line_bot_blob_api.get_message_content(event.message.id)
+    
+    # 将音频内容保存为临时文件
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as temp_audio:
+        temp_audio.write(audio_content)
+        temp_audio_path = temp_audio.name
+
+    # 语音识别
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(temp_audio_path) as source:
+        audio = recognizer.record(source)
+    
+    try:
+        # 假设用户说的是中文
+        text = recognizer.recognize_google(audio, language="zh-TW")
+        
+        # 翻译成英文
+        translator = Translator()
+        translated_text = translator.translate(text, src='zh-TW', dest='en').text
+        
+        reply_msg = f"原文：{text}\n翻译：{translated_text}"
+    except sr.UnknownValueError:
+        reply_msg = "抱歉，我无法识别这段语音。"
+    except sr.RequestError:
+        reply_msg = "抱歉，语音识别服务暂时不可用。"
+    except Exception as e:
+        reply_msg = f"发生错误：{str(e)}"
+    
+    # 删除临时文件
+    os.unlink(temp_audio_path)
+
+    # 发送回复消息
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=reply_msg)]
+            )
+        )
 
 
 if __name__ == "__main__":
